@@ -39,6 +39,8 @@ int server(char* port){
 	struct sockaddr_storage their_addr;
 	char buf[MAXBUFLEN];
 	socklen_t addr_len;
+	fd_set readfds, writefds, master;
+	int fdmax;
 
 	//char s[INET6_ADDRSTRLEN];
 
@@ -85,25 +87,44 @@ int server(char* port){
 		exit(1);
 	}*/
 
+	/* clear sets for select() */
+  FD_ZERO(&readfds);
+  FD_ZERO(&master);
+  FD_ZERO(&writefds);
+  /* Add udp socket to both write and read fds */
+  FD_SET(sockfd, &master);
+  //FD_SET(sockfd, &master);
+  fdmax = sockfd;/* From beej's guide, TODO: UNDERSTAND */
+
+	char test[] = "TOIMII";
+	char test2[] ="-------";
 	/* MAIN LOOP  */
 	while(1){
-		printf("listener: waiting to recvfrom...\n");
+		readfds = master;
+    writefds = master;
+		printf("%s\n", test2);
 
-		/* RECEIVE GUESSES */
-		addr_len = sizeof their_addr;
-		if ((numbytes = recvfrom(sockfd, buf, MAXBUFLEN-1 , 0,
-			(struct sockaddr *)&their_addr, &addr_len)) == -1) {
-			perror("recvfrom");
-			exit(1);
+
+		if (select(fdmax+1, &readfds, &writefds, NULL, NULL) == -1){
+			perror("select");
 		}
-		buf[numbytes] = '\0';
 
-		// if(numbytes != -1){
-		// 	buf[numbytes] = '\0';
-		// 	printf("%s\n", "adding player");
-		// 	addplayer((struct sockaddr *)&their_addr, head, buf);
-		// }
-		unpackmsg(sockfd, (struct sockaddr *)&their_addr, buf);
+		/* Check for any data to receive */
+		/* TODO TCP CHAT */
+		if(FD_ISSET(sockfd, &readfds)){
+			/* RECEIVE GUESSES */
+			addr_len = sizeof their_addr;
+			if ((numbytes = recvfrom(sockfd, buf, MAXBUFLEN-1 , 0,
+				(struct sockaddr *)&their_addr, &addr_len)) == -1) {
+				perror("recvfrom");
+				exit(1);
+			}
+			strcpy(test2, test);
+			buf[numbytes] = '\0';
+
+			unpackmsg(sockfd, (struct sockaddr *)&their_addr, buf);
+		}
+
 
 		/* INFORM OTHER PLAYERS ABOUT GUESSES */
 		/*char te[] = "-99";

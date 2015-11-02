@@ -14,7 +14,7 @@ void sendguess(char *nick, int s, const struct sockaddr *to, socklen_t tolen){
   scanf("%s", guess);
   strcat(msg, delim); // add space for protocol
   strcat(msg, guess); // add guess to the message
-  strcat(msg, delim); 
+  strcat(msg, delim);
   printf("::%s::",msg);
   sendto(s, msg, strlen(msg), 0, to, tolen);
 }
@@ -54,7 +54,8 @@ int client(char *ip, char *port){
 	int rv;
 	//int numbytes;
   //char msg[24];
-  int myturn = 1;
+  int myturn = 1, fdmax;
+  fd_set readfds, writefds, master;
 
   memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_UNSPEC;
@@ -83,6 +84,16 @@ int client(char *ip, char *port){
 		return 2;
 	}
 
+  /* clear sets for select() */
+  FD_ZERO(&readfds);
+  FD_ZERO(&master);
+  FD_ZERO(&writefds);
+  /* Add udp socket to both write and read fds */
+  FD_SET(sockfd, &master);
+  //FD_SET(sockfd, &master);
+  fdmax = sockfd;/* From beej's guide, TODO: UNDERSTAND */
+
+
   printf("Input nick: ");
   scanf("%s", nick);
 
@@ -92,9 +103,18 @@ int client(char *ip, char *port){
   /* MAIN LOOP */
   while(1){
 
-    if(myturn){
+    readfds = master;
+    writefds = master;
+
+    if (select(fdmax+1, &readfds, &writefds, NULL, NULL) == -1){
+      perror("select");
+    }
+    /* check for data to send / receive */
+    if (FD_ISSET(sockfd, &readfds)){
+      getinfo(sockfd, p->ai_addr, p->ai_addrlen, &myturn);
+    }
+    else if (FD_ISSET(sockfd, &writefds)){
       sendguess(nick, sockfd, p->ai_addr, p->ai_addrlen);
-      //myturn = 0;
     }
     else{
       //getinfo(sockfd, p->ai_addr, p->ai_addrlen, &myturn);
