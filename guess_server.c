@@ -17,7 +17,7 @@ int isGuessed = 0; // has the number been guessed?
 
 void addplayer(struct sockaddr *ip, char* nick);
 void testprint(struct player *head);
-void unpackmsg(int socket,  struct sockaddr *from, char *msg);
+void unpackmsg(int socket,  struct sockaddr *from, char *msg, socklen_t len);
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -111,7 +111,7 @@ int server(char* port){
 
 		/* Check for any data to receive */
 		/* TODO TCP CHAT */
-		if(FD_ISSET(sockfd, &readfds)){
+		if (FD_ISSET(sockfd, &readfds)){
 			/* RECEIVE GUESSES */
 			addr_len = sizeof their_addr;
 			if ((numbytes = recvfrom(sockfd, buf, MAXBUFLEN-1 , 0,
@@ -122,7 +122,7 @@ int server(char* port){
 			strcpy(test2, test);
 			buf[numbytes] = '\0';
 
-			unpackmsg(sockfd, (struct sockaddr *)&their_addr, buf);
+			unpackmsg(sockfd, (struct sockaddr *)&their_addr, buf, addr_len);
 		}
 
 
@@ -208,7 +208,7 @@ int ipcmp(struct sockaddr *from, struct sockaddr *player){
 }
 
 /* Handle clients guesses */
-void checkguess(struct sockaddr *from, char *msg){
+void checkguess(struct sockaddr *from, char *msg, int socket, socklen_t len){
 	struct player *tmp = head;
 	char tmpmsg[1024];
 	char nick[24];
@@ -229,9 +229,11 @@ void checkguess(struct sockaddr *from, char *msg){
 
 				/* See if it's the right number! */
 				if(atoi(guess) == number){
-					// handle guess TODO
 					printf("%s\n", "And it was the right number!");
 					isGuessed = 1;
+					/* Ask for new number */
+					askfornum(socket, from, len);
+
 				}
 			}
 		}
@@ -239,7 +241,7 @@ void checkguess(struct sockaddr *from, char *msg){
 	}
 }
 
-void unpackmsg(int socket,  struct sockaddr *from, char *msg){
+void unpackmsg(int socket,  struct sockaddr *from, char *msg, socklen_t len){
 	char tmpmsg[256];
 	strcpy(tmpmsg, msg); // copy the original msg so that strtok wont affect it
 	char *p; // for strtok
@@ -252,7 +254,7 @@ void unpackmsg(int socket,  struct sockaddr *from, char *msg){
 	/* it's a guess */
 	else if(atoi(p) == 2){
 		printf("its a guess msg: %s\n", msg);
-		checkguess(from, msg);
+		checkguess(from, msg, socket, len);
 
 	}
 	/* A new number to be guessed */
@@ -273,4 +275,9 @@ void setnumber(int *numguess, char *msg){
 	pch = strtok(tmpmsg, " ");
 	newnum = atoi(pch);
 	*numguess = newnum;
+}
+
+void askfornum(int socket, const struct sockaddr *to, socklen_t tolen){
+	char msg[MAXBUFLEN] = "-99";
+	sendto(socket, msg, strlen(msg), 0, to, tolen);
 }

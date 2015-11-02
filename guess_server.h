@@ -17,6 +17,8 @@ void setnumber(int *numguess, char *msg);
 void broadcastGuess(int sockfd, const void *msg, int len, unsigned int flags,
                                     const struct sockaddr *to, socklen_t tolen);
 
+void askfornum(int socket, const struct sockaddr *to, socklen_t tolen);
+
 
 
 #endif

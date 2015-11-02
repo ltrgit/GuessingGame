@@ -1,6 +1,9 @@
 #include "guess_client.h"
 #define MAXBUF 1024
 
+/* WARNING GLOBALS */
+int isMyTurn = 0;
+
 /* Sends guess to server */
 void sendguess(char *nick, int s, const struct sockaddr *to, socklen_t tolen){
   char msg[MAXBUF];
@@ -19,17 +22,31 @@ void sendguess(char *nick, int s, const struct sockaddr *to, socklen_t tolen){
   sendto(s, msg, strlen(msg), 0, to, tolen);
 }
 
+/* set/send new number to the server which other players can guess */
+void sendnumber(int s, const struct sockaddr *to, socklen_t tolen){
+  char msg[MAXBUF];
+  char msgtype[MAXBUF] = "3 "; /* msg type for set new number */
+
+  printf("%s\n", "Input new number to guess: ");
+  scanf("%s\n", msg);
+
+  /* Catenate type and new number and send it to the server */
+  strcat(msgtype, msg);
+  printf("setnum: --%s--\n", msgtype);
+  sendto(s, msgtype, strlen(msgtype), 0, to, tolen);
+
+}
+
 /* Receives information from server: what other players have guessed and tells when it is players turn ahain */
-void getinfo(int socket,  struct sockaddr *from, socklen_t fromlen, int *turn){
+void getinfo(int socket,  struct sockaddr *from, socklen_t fromlen){
 
   char recvbuf[MAXBUF];
   recvfrom(socket, recvbuf, MAXBUF-1, 0, from, &fromlen);
   printf("got: %s\n", recvbuf);
 
-  /* check for turn msg */
+  /* if msgtype = -99 player can set the new number */
   if (atoi(recvbuf) == -99){
-    *turn = 1;
-    printf("Your turn to guess!\n");
+    isMyTurn = 1;
   }
 }
 
@@ -54,7 +71,7 @@ int client(char *ip, char *port){
 	int rv;
 	//int numbytes;
   //char msg[24];
-  int myturn = 1, fdmax;
+  int fdmax;
   fd_set readfds, writefds, master;
 
   memset(&hints, 0, sizeof hints);
@@ -111,10 +128,14 @@ int client(char *ip, char *port){
     }
     /* check for data to send / receive */
     if (FD_ISSET(sockfd, &readfds)){
-      getinfo(sockfd, p->ai_addr, p->ai_addrlen, &myturn);
+      getinfo(sockfd, p->ai_addr, p->ai_addrlen);
     }
     else if (FD_ISSET(sockfd, &writefds)){
       sendguess(nick, sockfd, p->ai_addr, p->ai_addrlen);
+      if(isMyTurn){
+        sendnumber(sockfd, p->ai_addr, p->ai_addrlen);
+        isMyTurn = 0;
+      }
     }
     else{
       //getinfo(sockfd, p->ai_addr, p->ai_addrlen, &myturn);
