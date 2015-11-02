@@ -13,6 +13,9 @@
 
 int server(char*);
 void *get_in_addr(struct sockaddr *sa);
+void setnumber(int *numguess, char *msg);
+void broadcastGuess(int sockfd, const void *msg, int len, unsigned int flags,
+                                    const struct sockaddr *to, socklen_t tolen);
 
 
 

@@ -12,6 +12,8 @@ struct player{
 
 /* Warning: GLOBAL VARIABLES! */
 struct player *head = NULL, *end = NULL;
+int number = -99; // number to guess
+int isGuessed = 0; // has the number been guessed?
 
 void addplayer(struct sockaddr *ip, char* nick);
 void testprint(struct player *head);
@@ -37,6 +39,7 @@ int server(char* port){
 	struct sockaddr_storage their_addr;
 	char buf[MAXBUFLEN];
 	socklen_t addr_len;
+
 	//char s[INET6_ADDRSTRLEN];
 
 
@@ -202,6 +205,13 @@ void checkguess(struct sockaddr *from, char *msg){
 			/* if IP and the nick is the same we can be sure it's the rigth person */
 			if(strcmp(tmp->nick, nick) == 0){
 				printf("%s guessed %d\n",tmp->nick, atoi(guess));
+
+				/* See if it's the right number! */
+				if(atoi(guess) == number){
+					// handle guess TODO
+					printf("%s\n", "And it was the right number!");
+					isGuessed = 1;
+				}
 			}
 		}
 		tmp = tmp->next;
@@ -224,4 +234,22 @@ void unpackmsg(int socket,  struct sockaddr *from, char *msg){
 		checkguess(from, msg);
 
 	}
+	/* A new number to be guessed */
+	else if(atoi(p) == 3){
+		if(isGuessed) {
+			setnumber(&number,msg);
+		}
+	}
+}
+
+/* Set the new number to be guessed*/
+void setnumber(int *numguess, char *msg){
+	char tmpmsg[256], *pch;
+	strcpy(tmpmsg, msg);
+	int newnum;
+	/* strtok() twice to get the new message from the header/packet */
+	pch = strtok(tmpmsg, " ");
+	pch = strtok(tmpmsg, " ");
+	newnum = atoi(pch);
+	*numguess = newnum;
 }
