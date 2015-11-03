@@ -104,7 +104,7 @@ int server(char* port){
 	while(1){
 		readfds = master;
     writefds = master;
-		printf("%s\n", debugmsg);
+		//printf("%s\n", debugmsg);
 
 
 		if (select(fdmax+1, &readfds, &writefds, NULL, NULL) == -1){

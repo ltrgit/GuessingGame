@@ -18,7 +18,7 @@ void sendguess(char *nick, int s, const struct sockaddr *to, socklen_t tolen){
   strcat(msg, delim); // add space for protocol
   strcat(msg, guess); // add guess to the message
   strcat(msg, delim);
-  printf("::%s::",msg);
+  //printf("::%s::",msg);
   sendto(s, msg, strlen(msg), 0, to, tolen);
 }
 
@@ -32,7 +32,7 @@ void sendnumber(int s, const struct sockaddr *to, socklen_t tolen){
 
   /* Catenate type and new number and send it to the server */
   strcat(msgtype, msg);
-  printf("setnum: --%s--\n", msgtype);
+  //printf("setnum: --%s--\n", msgtype);
   sendto(s, msgtype, strlen(msgtype), 0, to, tolen);
 
 }
@@ -40,13 +40,36 @@ void sendnumber(int s, const struct sockaddr *to, socklen_t tolen){
 /* Receives information from server: what other players have guessed and tells when it is players turn ahain */
 void getinfo(int socket,  struct sockaddr *from, socklen_t fromlen){
 
+  int numbytes;
   char recvbuf[MAXBUF];
-  recvfrom(socket, recvbuf, MAXBUF-1, 0, from, &fromlen);
-  printf("got: %s\n", recvbuf);
+  char guess[MAXBUF];
+  char tmpmsg[MAXBUF]; // copy of original msg, meeder for strtok()
+  char *type; // strtok packets firs part to see what kind of message it is
+  char *pmsg;
 
+  numbytes = recvfrom(socket, recvbuf, MAXBUF-1, 0, from, &fromlen);
+  //printf("got: %s\n", recvbuf);
+  recvbuf[numbytes] = '\0';
+
+  /* copy msg to tmpmsg so that strtok won't affect the original msg */
+  strcpy(tmpmsg, recvbuf);
+  //printf("GOT: %s\n", tmpmsg);
+  type = strtok(tmpmsg, " ");   /* get msgtype */
+
+  /* Act according to msg type */
   /* if msgtype = -99 player can set the new number */
   if (atoi(recvbuf) == -99){
     isMyTurn = 1;
+  }
+  /* other players guess */
+  else if(atoi(type) == -16){
+    pmsg = strtok(NULL, " ");
+    printf("%s\n", recvbuf);
+    strcpy(guess, pmsg);
+    strcat(guess, " guessed ");
+    pmsg = strtok(NULL, " ");
+    strcat(guess, pmsg);
+    //printf("%s\n", guess);
   }
 }
 
@@ -55,7 +78,7 @@ void join(char *nick, int s, const struct sockaddr *to, socklen_t tolen){
   char msgtype[] = "1 ";
   strcpy(msg, msgtype);
   strcat(msg, nick);
-  printf("::%s::\n", msg);
+  //printf("::%s::\n", msg);
 
 
   sendto(s, msg, strlen(msg), 0, to, tolen);
@@ -131,10 +154,15 @@ int client(char *ip, char *port){
       getinfo(sockfd, p->ai_addr, p->ai_addrlen);
     }
     else if (FD_ISSET(sockfd, &writefds)){
-      sendguess(nick, sockfd, p->ai_addr, p->ai_addrlen);
+      //sendguess(nick, sockfd, p->ai_addr, p->ai_addrlen);
       if(isMyTurn){
-        sendnumber(sockfd, p->ai_addr, p->ai_addrlen);
+        printf("Your turn!\n");
+        sendguess(nick, sockfd, p->ai_addr, p->ai_addrlen);
         isMyTurn = 0;
+      }
+      /* player guessed right and can now set the new number to be guessed */
+      else if (won){
+        sendnumber(sockfd, p->ai_addr, p->ai_addrlen);
       }
     }
     else{
