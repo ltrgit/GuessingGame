@@ -2,7 +2,8 @@
 #define MAXBUF 1024
 
 /* WARNING GLOBALS */
-int isMyTurn = 0;
+int isMyTurn = 1; /* Is my turn? */
+int won = 0;      /* Did I win? */
 
 /* Sends guess to server */
 void sendguess(char *nick, int s, const struct sockaddr *to, socklen_t tolen){
@@ -59,17 +60,18 @@ void getinfo(int socket,  struct sockaddr *from, socklen_t fromlen){
   /* Act according to msg type */
   /* if msgtype = -99 player can set the new number */
   if (atoi(recvbuf) == -99){
-    isMyTurn = 1;
+    won = 1;
+    printf("%s\n", "Winner winner chicken dinner!\n");
   }
   /* other players guess */
   else if(atoi(type) == -16){
     pmsg = strtok(NULL, " ");
-    printf("%s\n", recvbuf);
+    //printf("%s\n", recvbuf); /* tulee okein */
     strcpy(guess, pmsg);
     strcat(guess, " guessed ");
     pmsg = strtok(NULL, " ");
     strcat(guess, pmsg);
-    //printf("%s\n", guess);
+    printf("%s\n", guess);
   }
 }
 
@@ -155,14 +157,15 @@ int client(char *ip, char *port){
     }
     else if (FD_ISSET(sockfd, &writefds)){
       //sendguess(nick, sockfd, p->ai_addr, p->ai_addrlen);
-      if(isMyTurn){
-        printf("Your turn!\n");
+      if(isMyTurn && won == 0){
+        printf("Your turn! state of won %d \n", won);
         sendguess(nick, sockfd, p->ai_addr, p->ai_addrlen);
-        isMyTurn = 0;
+        isMyTurn = 1;
       }
       /* player guessed right and can now set the new number to be guessed */
-      else if (won){
+      if (won){
         sendnumber(sockfd, p->ai_addr, p->ai_addrlen);
+        won = 0;
       }
     }
     else{

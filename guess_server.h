@@ -13,7 +13,7 @@
 
 int server(char*);
 void *get_in_addr(struct sockaddr *sa);
-void setnumber(int *numguess, char *msg);
+void setnumber(char *msg);
 void broadcastGuess(int sockfd, const void *msg, int len);
 
 void askfornum(int socket, const struct sockaddr *to, socklen_t tolen);

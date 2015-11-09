@@ -216,9 +216,8 @@ void checkguess(struct sockaddr *from, char *msg, int socket, socklen_t len){
 	char tmpmsg[MAXBUFLEN], brdcstmsg[MAXBUFLEN] = "-16 ";
 	char nick[24];
 	char *guess;
-	strcpy(tmpmsg, msg);
 
-	printf("ORIG MSG: %s\n", tmpmsg);
+	strcpy(tmpmsg, msg);
 	guess = strtok(tmpmsg, " "); // split on spaces "msgtype nick guess"
 	guess = strtok(NULL, " ");   // split again to get nick
 	strcpy(nick, guess);
@@ -236,13 +235,23 @@ void checkguess(struct sockaddr *from, char *msg, int socket, socklen_t len){
 					isGuessed = 1;
 					/* Ask for new number */
 					askfornum(socket, from, len);
+
+					/* let other players know what was guessed */
+					strcat(brdcstmsg, tmp->nick);
+					strcat(brdcstmsg, " ");
+					strcat(brdcstmsg, " Guessed");
+					strcat(brdcstmsg, " Right");
+					strcpy(debugmsg, brdcstmsg);
+					broadcastGuess(socket, brdcstmsg, strlen(brdcstmsg));
 				}
-				/* let other players know what was guessed */
-				strcat(brdcstmsg, tmp->nick);
-				strcat(brdcstmsg, " ");
-				strcat(brdcstmsg, guess);
-				strcpy(debugmsg, brdcstmsg);
-				broadcastGuess(socket, brdcstmsg, strlen(brdcstmsg));
+				else {
+					/* let other players know what was guessed */
+					strcat(brdcstmsg, tmp->nick);
+					strcat(brdcstmsg, " ");
+					strcat(brdcstmsg, guess);
+					strcpy(debugmsg, brdcstmsg);
+					broadcastGuess(socket, brdcstmsg, strlen(brdcstmsg));
+				}
 			}
 		}
 		tmp = tmp->next;
@@ -262,7 +271,7 @@ void unpackmsg(int socket,  struct sockaddr *from, char *msg, socklen_t len){
 	}
 	/* it's a guess */
 	else if(atoi(p) == 2){
-		printf("its a guess msg: %s\n", msg);
+		printf("number: %d", number);
 		checkguess(from, msg, socket, len);
 
 
@@ -270,13 +279,14 @@ void unpackmsg(int socket,  struct sockaddr *from, char *msg, socklen_t len){
 	/* A new number to be guessed */
 	else if(atoi(p) == 3){
 		if(isGuessed) {
-			setnumber(&number,msg);
+			setnumber(msg);
+			isGuessed = 0;
 		}
 	}
 }
 
 /* Set the new number to be guessed*/
-void setnumber(int *numguess, char *msg){
+void setnumber(char *msg){
 	char tmpmsg[256], *pch;
 	strcpy(tmpmsg, msg);
 	int newnum;
@@ -284,7 +294,8 @@ void setnumber(int *numguess, char *msg){
 	pch = strtok(tmpmsg, " ");
 	pch = strtok(tmpmsg, " ");
 	newnum = atoi(pch);
-	*numguess = newnum;
+	printf("New number to be set: %d", newnum);
+	number = newnum;
 }
 
 void askfornum(int socket, const struct sockaddr *to, socklen_t tolen){
