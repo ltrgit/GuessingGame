@@ -1,5 +1,6 @@
 #include "guess_client.h"
 #define MAXBUF 1024
+#define TCPPORT "53100"
 
 /* WARNING GLOBALS */
 int isMyTurn = 1; /* Is my turn? */
@@ -92,13 +93,15 @@ void join(char *nick, int s, const struct sockaddr *to, socklen_t tolen){
 int client(char *ip, char *port){
   char nick[8];
   int sockfd;
-	struct addrinfo hints, *servinfo, *p;
+  int tcpsockfd;
+	struct addrinfo hints, *servinfo, *p, *res, *ai;
 	int rv;
 	//int numbytes;
   //char msg[24];
   int fdmax;
   fd_set readfds, writefds, master;
 
+  /* For UDP connection / gameplay */
   memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_DGRAM;
@@ -126,21 +129,56 @@ int client(char *ip, char *port){
 		return 2;
 	}
 
+  /* For TCP chat connection */
+  memset(&hints, 0, sizeof hints);
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+
+	if ((rv = getaddrinfo(ip, TCPPORT, &hints, &ai)) != 0) {
+		fprintf(stderr, "getaddrinfo tcp: %s\n", gai_strerror(rv));
+		return 1;
+	}
+
+
+
+	// loop through all the results and make a socket
+	for(res = ai; p != NULL; res = res->ai_next) {
+		if ((tcpsockfd = socket(res->ai_family, res->ai_socktype,
+				res->ai_protocol)) == -1) {
+			perror("talker: socket");
+			continue;
+		}
+
+		break;
+	}
+
+	if (res == NULL) {
+		fprintf(stderr, "talker: failed to create socket\n");
+		return 2;
+	}
+
   /* clear sets for select() */
   FD_ZERO(&readfds);
   FD_ZERO(&master);
   FD_ZERO(&writefds);
   /* Add udp socket to both write and read fds */
   FD_SET(sockfd, &master);
+  FD_SET(tcpsockfd, &master);
   //FD_SET(sockfd, &master);
-  fdmax = sockfd;/* From beej's guide, TODO: UNDERSTAND */
-
+  if(tcpsockfd > sockfd){
+    fdmax = tcpsockfd;
+  }
+  else {
+    fdmax = sockfd;/* From beej's guide, TODO: UNDERSTAND */
+  }
 
   printf("Input nick: ");
   scanf("%s", nick);
 
   /* send nick as join msg to server */
   join(nick, sockfd, p->ai_addr, p->ai_addrlen);
+  /* Try to TCP with the server straight away */
+  connect(sockfd, res->ai_addr, res->ai_addrlen);
 
   /* MAIN LOOP */
   while(1){
@@ -169,13 +207,17 @@ int client(char *ip, char *port){
         isMyTurn = 1;
       }
     }
+    /* TCP CHAT MSG RECV */
+    else if (1 != 1){
+
+    }
+    /* TCP CHAT MSG SEND */
+    else if (1 != 1){
+
+    }
     else{
       //getinfo(sockfd, p->ai_addr, p->ai_addrlen, &myturn);
     }
-
-
-
-
   }
 
   return 0;

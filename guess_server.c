@@ -2,6 +2,7 @@
 
 #define MAXBUFLEN 1024
 #define PMAX 10
+#define TCPPORT "53100"
 
 /* player data structure */
 struct player{
@@ -36,8 +37,8 @@ void *get_in_addr(struct sockaddr *sa)
 
 int server(char* port){
 
-	int sockfd;
-	struct addrinfo hints, *servinfo, *p;
+	int sockfd, listener;
+	struct addrinfo hints, *servinfo, *p, *ai;
 	int rv;
 	int numbytes;
 	struct sockaddr_storage their_addr;
@@ -49,7 +50,7 @@ int server(char* port){
 	//char s[INET6_ADDRSTRLEN];
 
 
-
+	/* Initialization of UDP socket */
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_UNSPEC; // set to AF_INET to force IPv4
 	hints.ai_socktype = SOCK_DGRAM;
@@ -83,22 +84,65 @@ int server(char* port){
 	}
 
 	freeaddrinfo(servinfo);
-	/* players */
-	//struct player *head = NULL, *end = NULL;
-	//head = malloc(sizeof(struct player));
-	/*if(head == NULL){
-		printf("voe vittu\n");
+
+	/* Initialization of TCP listener socket */
+	// get us a socket and bind it
+	memset(&hints, 0, sizeof hints);
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE;
+	if ((rv = getaddrinfo(NULL, TCPPORT, &hints, &ai)) != 0) {
+		fprintf(stderr, "selectserver: %s\n", gai_strerror(rv));
 		exit(1);
-	}*/
+	}
+
+	for(p = ai; p != NULL; p = p->ai_next) {
+    	listener = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+		if (listener < 0) {
+			continue;
+		}
+
+		// lose the pesky "address already in use" error message
+		//setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+
+		if (bind(listener, p->ai_addr, p->ai_addrlen) < 0) {
+			close(listener);
+			continue;
+		}
+
+		break;
+	}
+
+	// if we got here, it means we didn't get bound
+	if (p == NULL) {
+		fprintf(stderr, "selectserver: failed to bind\n");
+		exit(2);
+	}
+
+	freeaddrinfo(ai); // all done with this
+	/* Listen for TCP connections */
+	if(listen(listener, 10) == -1){
+		perror("Listenin vika\n");
+	}
+	/* TCP LISTENER */
 
 	/* clear sets for select() */
   FD_ZERO(&readfds);
   FD_ZERO(&master);
   FD_ZERO(&writefds);
-  /* Add udp socket to both write and read fds */
+  /* Add udp and tcp sockets to both write and read fds */
   FD_SET(sockfd, &master);
+	FD_SET(listener, &master);
   //FD_SET(sockfd, &master);
-  fdmax = sockfd;/* From beej's guide, TODO: UNDERSTAND */
+
+	/* set the biggest socket */
+	if(listener > sockfd){
+		fdmax = listener;/* From beej's guide, TODO: UNDERSTAND */
+	}
+	else{
+		fdmax = sockfd;
+	}
+
 
 	char test[] = "TOIMII";
 	char test2[] ="-------";
@@ -113,8 +157,7 @@ int server(char* port){
 			perror("select");
 		}
 
-		/* Check for any data to receive */
-		/* TODO TCP CHAT */
+		/* Check for any UDP data to receive */
 		if (FD_ISSET(sockfd, &readfds)){
 			/* RECEIVE GUESSES */
 			addr_len = sizeof their_addr;
@@ -129,22 +172,7 @@ int server(char* port){
 			unpackmsg(sockfd, (struct sockaddr *)&their_addr, buf, addr_len);
 		}
 
-
-		/* INFORM OTHER PLAYERS ABOUT GUESSES */
-		/*char te[] = "-99";
-		if(sendto(sockfd, te , strlen(te), 0, (struct sockaddr *)&their_addr, addr_len) == -1){
-			perror("server send error\n");
-			exit(1);
-		}*/
-
-
-		/*printf("listener: got packet from %s\n",
-			inet_ntop(their_addr.ss_family,
-				get_in_addr((struct sockaddr *)&their_addr),
-				s, sizeof s));
-		//printf("listener: packet is %d bytes long\n", numbytes);*/
-		//buf[numbytes] = '\0';
-		//printf("listener: packet contains \"%s\"\n", buf);
+		/* loop through TCP connections */
 
 	}
 
