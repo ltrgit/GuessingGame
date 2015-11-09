@@ -156,16 +156,17 @@ int client(char *ip, char *port){
       getinfo(sockfd, p->ai_addr, p->ai_addrlen);
     }
     else if (FD_ISSET(sockfd, &writefds)){
-      //sendguess(nick, sockfd, p->ai_addr, p->ai_addrlen);
-      if(isMyTurn && won == 0){
+
+      /* player guessed right and can now set the new number to be guessed */
+      if (won == 1){
+        sendnumber(sockfd, p->ai_addr, p->ai_addrlen);
+        won = 0;
+        continue;
+      }
+      else if(isMyTurn && won == 0){
         printf("Your turn! state of won %d \n", won);
         sendguess(nick, sockfd, p->ai_addr, p->ai_addrlen);
         isMyTurn = 1;
-      }
-      /* player guessed right and can now set the new number to be guessed */
-      if (won){
-        sendnumber(sockfd, p->ai_addr, p->ai_addrlen);
-        won = 0;
       }
     }
     else{

@@ -9,6 +9,8 @@ struct player{
 	struct sockaddr address;
 	socklen_t len;
 	struct player *next;
+	char buffer[MAXBUFLEN];
+	int tcpsock;
 };
 
 /* Warning: GLOBAL VARIABLES! */
@@ -292,7 +294,7 @@ void setnumber(char *msg){
 	int newnum;
 	/* strtok() twice to get the new message from the header/packet */
 	pch = strtok(tmpmsg, " ");
-	pch = strtok(tmpmsg, " ");
+	pch = strtok(NULL, " ");
 	newnum = atoi(pch);
 	printf("New number to be set: %d", newnum);
 	number = newnum;
