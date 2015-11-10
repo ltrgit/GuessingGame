@@ -31,8 +31,8 @@ void sendnumber(int s, const struct sockaddr *to, socklen_t tolen){
   char msg[MAXBUF];
   char msgtype[MAXBUF] = "3 "; /* msg type for set new number */
 
-  printf("%s\n", "Input new number to guess: ");
-  scanf("%s\n", msg);
+  printf("%s", "Input new number to be guessed: ");
+  scanf("%s", msg);
 
   /* Catenate type and new number and send it to the server */
   strcat(msgtype, msg);
@@ -55,9 +55,11 @@ void getinfo(int socket,  struct sockaddr *from, socklen_t fromlen){
   numbytes = recvfrom(socket, recvbuf, MAXBUF-1, 0, from, &fromlen);
   //printf("got: %s\n", recvbuf);
   recvbuf[numbytes] = '\0';
+  printf("got:%s:\n", recvbuf);
 
   /* copy msg to tmpmsg so that strtok won't affect the original msg */
   strcpy(tmpmsg, recvbuf);
+  printf("%s\n", tmpmsg);
   //printf("GOT: %s\n", tmpmsg);
   type = strtok(tmpmsg, " ");   /* get msgtype */
 
@@ -94,7 +96,6 @@ int sendAllTCP(int socket, char *buf, int *len){
     bytesleft -= numb;
   }
   *len = sent;
-  printf("%s\n", "Sent nick\n");
   return numb==-1?-1:0;
 }
 
@@ -244,7 +245,8 @@ int client(char *ip, char *port){
     for(int i = 0; i <= fdmax; i++){
       if(FD_ISSET(i, &readfds)){
         if (i == sockfd){
-          getinfo(i, p->ai_addr, p->ai_addrlen);
+          printf("going to get info\n");
+          getinfo(sockfd, p->ai_addr, p->ai_addrlen);
         }
         else if(i == tcpsockfd){
           if ((nbytes = recv(tcpsockfd, chatmsg, sizeof(buf), 0)) == -1){
@@ -254,7 +256,7 @@ int client(char *ip, char *port){
           printf("CHAT MSG: %s\n", chatmsg);
         }
       }
-      else if(FD_ISSET(i, &writefds)){
+      if(FD_ISSET(i, &writefds)){
         if (i == sockfd){
           /* player guessed right and can now set the new number to be guessed */
           if (won == 1){

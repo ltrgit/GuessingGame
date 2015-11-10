@@ -38,14 +38,10 @@ int sendAllTCP(int socket, char *buf, int *len){
     if (numb == -1){
       break;
     }
-    else if (numb > 0){
-      printf("Something went: %d bytes\n", numb);
-    }
     sent += numb;
     bytesleft -= numb;
   }
   *len = sent;
-  printf("%s\n", "Sent nick\n");
   return numb==-1?-1:0;
 }
 
@@ -74,6 +70,7 @@ int server(char* port){
 	int fdmax;
 	int newfd ,i, len;
 	int yes = 1;
+	char remoteIP[INET6_ADDRSTRLEN];
 
 	//char s[INET6_ADDRSTRLEN];
 
@@ -189,21 +186,6 @@ int server(char* port){
 			perror("select");
 		}
 
-		/* Check for any UDP data to receive */
-		// if (FD_ISSET(sockfd, &readfds)){
-		// 	/* RECEIVE GUESSES */
-		// 	addr_len = sizeof their_addr;
-		// 	if ((numbytes = recvfrom(sockfd, buf, MAXBUFLEN-1 , 0,
-		// 		(struct sockaddr *)&their_addr, &addr_len)) == -1) {
-		// 		perror("recvfrom");
-		// 		exit(1);
-		// 	}
-		// 	strcpy(test2, test);
-		// 	buf[numbytes] = '\0';
-		//
-		// 	unpackmsg(sockfd, (struct sockaddr *)&their_addr, buf, addr_len);
-		// }
-
 		/* loop through TCP connections */
 		for(i = 0; i <= fdmax; i++){
 			if(FD_ISSET(i, &readfds)){
@@ -222,6 +204,7 @@ int server(char* port){
 						/* Add new player */
 						addplayerTCP(newfd, (struct sockaddr *)&their_addr, addr_len);
 						printf("Some one joined over TCP!\n");
+						testprint(head);
 					}
 				}
 				else if (i == sockfd){
@@ -234,6 +217,7 @@ int server(char* port){
 					}
 					strcpy(test2, test);
 					buf[numbytes] = '\0';
+					printf("gotfrom client: %s\n", buf);
 
 					unpackmsg(i, (struct sockaddr *)&their_addr, buf, addr_len);
 				}
@@ -316,9 +300,10 @@ void addplayer(struct sockaddr *ip, char* nick, socklen_t len){
 /*TEST ADD*/
 /* adds a new player in the end of the linked list */
 void addplayerTCP(int fd, struct sockaddr *ip, socklen_t len){
-	struct player *tmp;
+	struct player *tmp = head;
 	char nickbuf[MAXBUFLEN];
 	int nbytes;
+	memset(nickbuf, '\0', sizeof(nickbuf));
 
 	/* receive nick */
 	if ((nbytes = recv(fd, nickbuf, sizeof(nickbuf), 0)) <= 0){
@@ -333,6 +318,7 @@ void addplayerTCP(int fd, struct sockaddr *ip, socklen_t len){
 
 	tmp = (struct player*)malloc(sizeof(struct player));
 	tmp->address = *ip;
+	printf("In addp IP: %s\n", get_in_addr(ip));
 	strcpy(tmp->nick, nickbuf);
 	tmp->len = len;
 	tmp->tcpsock = fd;
@@ -382,38 +368,31 @@ void checkguess(struct sockaddr *from, char *msg, int socket, socklen_t len){
 	strcpy(nick, guess);
 	guess = strtok(NULL, " ");	// split again to get the guess
 
-	while(tmp != NULL){
-		if(ipcmp(&tmp->address, from) == 0){
-			/* if IP and the nick is the same we can be sure it's the rigth person */
-			if(strcmp(tmp->nick, nick) == 0){
-				printf("%s guessed %d\n",tmp->nick, atoi(guess));
+/* if IP and the nick is the same we can be sure it's the rigth person */
+	printf("%s guessed %d\n",nick, atoi(guess));
+	printf("guess is:%d\n", atoi(guess));
+	/* See if it's the right number! */
+	if(atoi(guess) == number){
+		printf("%s\n", "And it was the right number!");
+		isGuessed = 1;
+		/* Ask for new number */
+		askfornum(socket, from, len);
 
-				/* See if it's the right number! */
-				if(atoi(guess) == number){
-					printf("%s\n", "And it was the right number!");
-					isGuessed = 1;
-					/* Ask for new number */
-					askfornum(socket, from, len);
-
-					/* let other players know what was guessed */
-					strcat(brdcstmsg, tmp->nick);
-					strcat(brdcstmsg, " ");
-					strcat(brdcstmsg, " Guessed");
-					strcat(brdcstmsg, " Right");
-					strcpy(debugmsg, brdcstmsg);
-					broadcastGuess(socket, brdcstmsg, strlen(brdcstmsg));
-				}
-				else {
-					/* let other players know what was guessed */
-					strcat(brdcstmsg, tmp->nick);
-					strcat(brdcstmsg, " ");
-					strcat(brdcstmsg, guess);
-					strcpy(debugmsg, brdcstmsg);
-					broadcastGuess(socket, brdcstmsg, strlen(brdcstmsg));
-				}
-			}
-		}
-		tmp = tmp->next;
+		/* let other players know what was guessed */
+		strcat(brdcstmsg, tmp->nick);
+		strcat(brdcstmsg, " ");
+		strcat(brdcstmsg, " Guessed");
+		strcat(brdcstmsg, " Right");
+		strcpy(debugmsg, brdcstmsg);
+		broadcastGuess(socket, brdcstmsg, strlen(brdcstmsg));
+	}
+	else {
+		/* let other players know what was guessed */
+		strcat(brdcstmsg, nick);
+		strcat(brdcstmsg, " ");
+		strcat(brdcstmsg, guess);
+		strcpy(debugmsg, brdcstmsg);
+		broadcastGuess(socket, brdcstmsg, strlen(brdcstmsg));
 	}
 }
 
@@ -430,7 +409,7 @@ void unpackmsg(int socket,  struct sockaddr *from, char *msg, socklen_t len){
 	}
 	/* it's a guess */
 	else if(atoi(p) == 2){
-		printf("number: %d", number);
+		printf("number: %d\n", number);
 		checkguess(from, msg, socket, len);
 
 
@@ -459,14 +438,22 @@ void setnumber(char *msg){
 
 void askfornum(int socket, const struct sockaddr *to, socklen_t tolen){
 	char msg[MAXBUFLEN] = "-99";
-	sendto(socket, msg, strlen(msg), 0, to, tolen);
+	if((sendto(socket, msg, strlen(msg), 0, to, tolen)) == -1){
+		perror("asknum sendto");
+	}
 }
 
 /* Inform player about other players guesses */
-void broadcastGuess(int sockfd, const void *msg, int len){
+void broadcastGuess(int sockfd, char *msg, int len){
   struct player *tmp = head;
+	int n;
+	printf("viestihän on:%s:\n", msg);
 	while(tmp != NULL){
-		sendto(sockfd, msg, len, 0, &tmp->address, tmp->len);
+		if((n=sendto(sockfd, msg, len, 0, &tmp->address, tmp->len)) == -1){
+			perror("Broadcast sendto\n");
+		}
+		printf("brdcstSendto: %s IP:%s\n", tmp->nick,get_in_addr(&tmp->address));
+		printf("Sent %d bytes\n", n);
 		tmp = tmp->next;
 	}
 
