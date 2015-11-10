@@ -15,6 +15,7 @@
 
 int client(char* port, char* ip);
 void sendnumber(int s, const struct sockaddr *to, socklen_t tolen);
+void addplayerTCP(int fd, struct sockaddr *ip, socklen_t len);
 
 
 #endif

@@ -20,9 +20,34 @@ int number = -99; // number to guess
 int isGuessed = 0; // has the number been guessed?
 char debugmsg[MAXBUFLEN] = "======================================";
 
+
 void addplayer(struct sockaddr *ip, char* nick, socklen_t len);
+void addplayerTCP(int fd, struct sockaddr *ip, socklen_t len);
+
 void testprint(struct player *head);
 void unpackmsg(int socket,  struct sockaddr *from, char *msg, socklen_t len);
+
+
+int sendAllTCP(int socket, char *buf, int *len){
+  int sent = 0;   /* how many bytes sent */
+  int bytesleft = *len; /* how many bytes yet be sent */
+  int numb = 0;
+
+  while (sent < *len) {
+    numb = send(socket, buf+sent, bytesleft, 0);
+    if (numb == -1){
+      break;
+    }
+    else if (numb > 0){
+      printf("Something went: %d bytes\n", numb);
+    }
+    sent += numb;
+    bytesleft -= numb;
+  }
+  *len = sent;
+  printf("%s\n", "Sent nick\n");
+  return numb==-1?-1:0;
+}
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -43,11 +68,55 @@ int server(char* port){
 	int numbytes;
 	struct sockaddr_storage their_addr;
 	char buf[MAXBUFLEN];
+	char chatbuf[MAXBUFLEN];
 	socklen_t addr_len;
 	fd_set readfds, writefds, master;
 	int fdmax;
+	int newfd ,i, len;
+	int yes = 1;
 
 	//char s[INET6_ADDRSTRLEN];
+
+	/* Initialization of TCP listener socket */
+	// get us a socket and bind it
+	memset(&hints, 0, sizeof hints);
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE;
+	if ((rv = getaddrinfo(NULL, TCPPORT, &hints, &ai)) != 0) {
+		fprintf(stderr, "selectserver: %s\n", gai_strerror(rv));
+		exit(1);
+	}
+
+	for(p = ai; p != NULL; p = p->ai_next) {
+    	listener = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+		if (listener < 0) {
+			continue;
+		}
+
+		// lose the pesky "address already in use" error message
+		setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+
+		if (bind(listener, p->ai_addr, p->ai_addrlen) < 0) {
+			close(listener);
+			continue;
+		}
+
+		break;
+	}
+
+	// if we got here, it means we didn't get bound
+	if (p == NULL) {
+		fprintf(stderr, "selectserver: failed to bind\n");
+		exit(2);
+	}
+
+	freeaddrinfo(ai); // all done with this
+	/* Listen for TCP connections */
+	if(listen(listener, 10) == -1){
+		perror("Listenin vika\n");
+	}
+	/* TCP LISTENER */
 
 
 	/* Initialization of UDP socket */
@@ -85,46 +154,7 @@ int server(char* port){
 
 	freeaddrinfo(servinfo);
 
-	/* Initialization of TCP listener socket */
-	// get us a socket and bind it
-	memset(&hints, 0, sizeof hints);
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE;
-	if ((rv = getaddrinfo(NULL, TCPPORT, &hints, &ai)) != 0) {
-		fprintf(stderr, "selectserver: %s\n", gai_strerror(rv));
-		exit(1);
-	}
 
-	for(p = ai; p != NULL; p = p->ai_next) {
-    	listener = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-		if (listener < 0) {
-			continue;
-		}
-
-		// lose the pesky "address already in use" error message
-		//setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
-
-		if (bind(listener, p->ai_addr, p->ai_addrlen) < 0) {
-			close(listener);
-			continue;
-		}
-
-		break;
-	}
-
-	// if we got here, it means we didn't get bound
-	if (p == NULL) {
-		fprintf(stderr, "selectserver: failed to bind\n");
-		exit(2);
-	}
-
-	freeaddrinfo(ai); // all done with this
-	/* Listen for TCP connections */
-	if(listen(listener, 10) == -1){
-		perror("Listenin vika\n");
-	}
-	/* TCP LISTENER */
 
 	/* clear sets for select() */
   FD_ZERO(&readfds);
@@ -151,6 +181,8 @@ int server(char* port){
 		readfds = master;
     writefds = master;
 		//printf("%s\n", debugmsg);
+		memset(buf, '\0', sizeof(buf));
+		memset(chatbuf, '\0', sizeof(chatbuf));
 
 
 		if (select(fdmax+1, &readfds, &writefds, NULL, NULL) == -1){
@@ -158,22 +190,80 @@ int server(char* port){
 		}
 
 		/* Check for any UDP data to receive */
-		if (FD_ISSET(sockfd, &readfds)){
-			/* RECEIVE GUESSES */
-			addr_len = sizeof their_addr;
-			if ((numbytes = recvfrom(sockfd, buf, MAXBUFLEN-1 , 0,
-				(struct sockaddr *)&their_addr, &addr_len)) == -1) {
-				perror("recvfrom");
-				exit(1);
-			}
-			strcpy(test2, test);
-			buf[numbytes] = '\0';
-
-			unpackmsg(sockfd, (struct sockaddr *)&their_addr, buf, addr_len);
-		}
+		// if (FD_ISSET(sockfd, &readfds)){
+		// 	/* RECEIVE GUESSES */
+		// 	addr_len = sizeof their_addr;
+		// 	if ((numbytes = recvfrom(sockfd, buf, MAXBUFLEN-1 , 0,
+		// 		(struct sockaddr *)&their_addr, &addr_len)) == -1) {
+		// 		perror("recvfrom");
+		// 		exit(1);
+		// 	}
+		// 	strcpy(test2, test);
+		// 	buf[numbytes] = '\0';
+		//
+		// 	unpackmsg(sockfd, (struct sockaddr *)&their_addr, buf, addr_len);
+		// }
 
 		/* loop through TCP connections */
+		for(i = 0; i <= fdmax; i++){
+			if(FD_ISSET(i, &readfds)){
+				if(i == listener && i != sockfd){
 
+					addr_len = sizeof their_addr;
+					newfd = accept(listener, (struct sockaddr *)&their_addr, &addr_len);
+					if(newfd == -1){
+						perror("accept failed\n");
+					}
+					else{
+						FD_SET(newfd, &master); /* add new socket to master set */
+						if (newfd > fdmax){
+							fdmax = newfd;
+						}
+						/* Add new player */
+						addplayerTCP(newfd, (struct sockaddr *)&their_addr, addr_len);
+						printf("Some one joined over TCP!\n");
+					}
+				}
+				else if (i == sockfd){
+					/* RECEIVE GUESSES */
+					addr_len = sizeof their_addr;
+					if ((numbytes = recvfrom(i, buf, MAXBUFLEN-1 , 0,
+						(struct sockaddr *)&their_addr, &addr_len)) == -1) {
+						perror("recvfrom");
+						exit(1);
+					}
+					strcpy(test2, test);
+					buf[numbytes] = '\0';
+
+					unpackmsg(i, (struct sockaddr *)&their_addr, buf, addr_len);
+				}
+				else{ /*TCP Chat msg*/
+					if ((numbytes = recv(i, chatbuf, sizeof chatbuf, 0)) <= 0){
+						if (numbytes == 0){
+							/* Connections closed */
+							printf("%s\n", "A connections closed\n");
+						}
+						else{
+							perror("revc in main loop DIED!\n");
+						}
+						close(i);
+						FD_CLR(i, &master);
+					}
+					/* Send msg to all */
+					for(int j = 0; j <= fdmax; j++){
+						if (FD_ISSET(j, &master)){
+							/* not to ourselves or udp sock */
+							if (j != i && j != sockfd && j != listener){
+								len = strlen(chatbuf);
+								if ((sendAllTCP(j, chatbuf, &len)) == -1){
+									perror("SENDALL");
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
 
@@ -222,6 +312,45 @@ void addplayer(struct sockaddr *ip, char* nick, socklen_t len){
 		end = tmp;
 	}
 }
+
+/*TEST ADD*/
+/* adds a new player in the end of the linked list */
+void addplayerTCP(int fd, struct sockaddr *ip, socklen_t len){
+	struct player *tmp;
+	char nickbuf[MAXBUFLEN];
+	int nbytes;
+
+	/* receive nick */
+	if ((nbytes = recv(fd, nickbuf, sizeof(nickbuf), 0)) <= 0){
+		/* error or connection closed */
+		if (nbytes == 0){
+			printf("%s\n", "A connection closed\n");
+		}
+		else{
+			perror("recv in addplayertcp\n");
+		}
+	}
+
+	tmp = (struct player*)malloc(sizeof(struct player));
+	tmp->address = *ip;
+	strcpy(tmp->nick, nickbuf);
+	tmp->len = len;
+	tmp->tcpsock = fd;
+	tmp->next = NULL;
+
+	/* First player to connect */
+	if(head == NULL){
+		printf("tmp nick: %s ja head on null \n", tmp->nick);
+		head = tmp;
+		end = tmp;
+	}
+	/* not the firs player, add to the end of the list */
+	else{
+		end->next = tmp;
+		end = tmp;
+	}
+}
+/*TEST ADD ENDS*/
 
 void testprint(){
 	struct player *tmp = head;

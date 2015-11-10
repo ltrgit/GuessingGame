@@ -5,6 +5,8 @@
 /* WARNING GLOBALS */
 int isMyTurn = 1; /* Is my turn? */
 int won = 0;      /* Did I win? */
+int chatturn = 0; /* Guess or chat */
+
 
 /* Sends guess to server */
 void sendguess(char *nick, int s, const struct sockaddr *to, socklen_t tolen){
@@ -48,6 +50,7 @@ void getinfo(int socket,  struct sockaddr *from, socklen_t fromlen){
   char tmpmsg[MAXBUF]; // copy of original msg, meeder for strtok()
   char *type; // strtok packets firs part to see what kind of message it is
   char *pmsg;
+  memset(recvbuf, '\0', sizeof(recvbuf));
 
   numbytes = recvfrom(socket, recvbuf, MAXBUF-1, 0, from, &fromlen);
   //printf("got: %s\n", recvbuf);
@@ -62,7 +65,7 @@ void getinfo(int socket,  struct sockaddr *from, socklen_t fromlen){
   /* if msgtype = -99 player can set the new number */
   if (atoi(recvbuf) == -99){
     won = 1;
-    printf("%s\n", "Winner winner chicken dinner!\n");
+    printf("%s\n", "Winner winner chicken dinner!\n\n");
   }
   /* other players guess */
   else if(atoi(type) == -16){
@@ -76,6 +79,26 @@ void getinfo(int socket,  struct sockaddr *from, socklen_t fromlen){
   }
 }
 
+/* From Beej's guide: http://beej.us/guide/bgnet/output/html/multipage/advanced.html#sendall  */
+int sendAllTCP(int socket, char *buf, int *len){
+  int sent = 0;   /* how many bytes sent */
+  int bytesleft = *len; /* how many bytes yet be sent */
+  int numb = 0;
+
+  while (sent < *len) {
+    numb = send(socket, buf+sent, bytesleft, 0);
+    if (numb == -1){
+      break;
+    }
+    sent += numb;
+    bytesleft -= numb;
+  }
+  *len = sent;
+  printf("%s\n", "Sent nick\n");
+  return numb==-1?-1:0;
+}
+
+/* Sends a join msg to the server and nick along with it */
 void join(char *nick, int s, const struct sockaddr *to, socklen_t tolen){
   char msg[MAXBUF];
   char msgtype[] = "1 ";
@@ -85,6 +108,26 @@ void join(char *nick, int s, const struct sockaddr *to, socklen_t tolen){
 
 
   sendto(s, msg, strlen(msg), 0, to, tolen);
+}
+
+void TCPjoin(int sockfd, char *nick){
+  int len = strlen(nick);
+
+  if (sendAllTCP(sockfd, nick, &len) == -1){
+    perror("Send all error!");
+    printf("%s: %d bytes\n", "only sent ", len);
+  }
+}
+
+void Chat(int tcpsock){
+  int len = 0;
+  char chatmsg[MAXBUF];
+  printf("%s", "Input chat message: ");
+  scanf("%s", chatmsg);
+  len = strlen(chatmsg);
+  if ((sendAllTCP(tcpsock, chatmsg, &len)) == -1){
+    perror("Chat sendall error");
+  }
 }
 
 /* send join message/nick to the server and join the game */
@@ -100,6 +143,9 @@ int client(char *ip, char *port){
   //char msg[24];
   int fdmax;
   fd_set readfds, writefds, master;
+  char buf[MAXBUF];
+  int nbytes;
+  char chatmsg[MAXBUF];
 
   /* For UDP connection / gameplay */
   memset(&hints, 0, sizeof hints);
@@ -176,47 +222,55 @@ int client(char *ip, char *port){
   scanf("%s", nick);
 
   /* send nick as join msg to server */
-  join(nick, sockfd, p->ai_addr, p->ai_addrlen);
+  //join(nick, sockfd, p->ai_addr, p->ai_addrlen);
+
   /* Try to TCP with the server straight away */
-  connect(sockfd, res->ai_addr, res->ai_addrlen);
+  if ((connect(tcpsockfd, res->ai_addr, res->ai_addrlen)) == -1){
+    perror("Can't connect TCP!\n");
+  }
+  TCPjoin(tcpsockfd, nick);
 
   /* MAIN LOOP */
   while(1){
 
     readfds = master;
     writefds = master;
+    memset(chatmsg, '\0', sizeof(chatmsg));
 
     if (select(fdmax+1, &readfds, &writefds, NULL, NULL) == -1){
       perror("select");
     }
-    /* check for data to send / receive */
-    if (FD_ISSET(sockfd, &readfds)){
-      getinfo(sockfd, p->ai_addr, p->ai_addrlen);
-    }
-    else if (FD_ISSET(sockfd, &writefds)){
 
-      /* player guessed right and can now set the new number to be guessed */
-      if (won == 1){
-        sendnumber(sockfd, p->ai_addr, p->ai_addrlen);
-        won = 0;
-        continue;
+    for(int i = 0; i <= fdmax; i++){
+      if(FD_ISSET(i, &readfds)){
+        if (i == sockfd){
+          getinfo(i, p->ai_addr, p->ai_addrlen);
+        }
+        else if(i == tcpsockfd){
+          if ((nbytes = recv(tcpsockfd, chatmsg, sizeof(buf), 0)) == -1){
+            perror("revc tcp\n");
+          }
+          //chatmsg[nbytes] = "\n";
+          printf("CHAT MSG: %s\n", chatmsg);
+        }
       }
-      else if(isMyTurn && won == 0){
-        printf("Your turn! state of won %d \n", won);
-        sendguess(nick, sockfd, p->ai_addr, p->ai_addrlen);
-        isMyTurn = 1;
+      else if(FD_ISSET(i, &writefds)){
+        if (i == sockfd){
+          /* player guessed right and can now set the new number to be guessed */
+          if (won == 1){
+            sendnumber(sockfd, p->ai_addr, p->ai_addrlen);
+            won = 0;
+          }
+          else if(isMyTurn && won == 0){
+            //printf("Your turn! state of won %d \n", won);
+            sendguess(nick, sockfd, p->ai_addr, p->ai_addrlen);
+            isMyTurn = 1;
+          }
+        }
+        else if (i == tcpsockfd){
+          Chat(tcpsockfd);
+        }
       }
-    }
-    /* TCP CHAT MSG RECV */
-    else if (1 != 1){
-
-    }
-    /* TCP CHAT MSG SEND */
-    else if (1 != 1){
-
-    }
-    else{
-      //getinfo(sockfd, p->ai_addr, p->ai_addrlen, &myturn);
     }
   }
 
